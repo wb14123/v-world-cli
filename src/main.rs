@@ -9,6 +9,8 @@ mod dao;
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
+    #[arg(short, long)]
+    profile_path: String,
     #[command(subcommand)]
     command: Commands,
 }
@@ -16,6 +18,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     CreateProfile {
+        #[arg(short, long)]
         id: String,
     }
 }
@@ -23,7 +26,7 @@ enum Commands {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    let profile_dao = dao::profile_yaml_dao::new("./profiles".to_string()).await?;
+    let profile_dao = dao::profile_yaml_dao::new(cli.profile_path).await?;
     match cli.command {
         Commands::CreateProfile { id} => {
             let mut p = Profile::default();
