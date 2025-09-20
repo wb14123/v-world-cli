@@ -2,6 +2,7 @@
 use clap::{Parser, Subcommand};
 
 mod model;
+mod dao;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -17,11 +18,12 @@ enum Commands {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
     match cli.command {
         Commands::CreateProfile { path } => {
-            model::profile::create_template_file(&path).unwrap();
+            model::profile::create_template_file(&path).await.unwrap();
             println!("Profile template file created successfully at {}", &path);
         }
     }
