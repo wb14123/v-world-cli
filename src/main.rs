@@ -1,5 +1,7 @@
 
 use clap::{Parser, Subcommand};
+use crate::dao::profile_dao::ProfileDao;
+use crate::model::profile::Profile;
 
 mod model;
 mod dao;
@@ -14,17 +16,25 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     CreateProfile {
-        path: String,
+        id: String,
     }
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+    let profile_dao = dao::profile_yaml_dao::new("./profiles".to_string()).await?;
     match cli.command {
-        Commands::CreateProfile { path } => {
-            model::profile::create_template_file(&path).await.unwrap();
-            println!("Profile template file created successfully at {}", &path);
+        Commands::CreateProfile { id} => {
+            let mut p = Profile::default();
+            p.id = id;
+            let created = profile_dao.create(&p).await?;
+            if created {
+                println!("Profile template file created successfully");
+            } else {
+                println!("Profile template file already exists");
+            }
         }
     }
+    Ok(())
 }
