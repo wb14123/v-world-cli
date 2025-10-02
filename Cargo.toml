@@ -7,4 +7,6 @@ edition = "2024"
 serde_yaml = "0.9.34"
 serde = { version = "1.0.225", features = ["derive"] }
 clap = { version = "4.5.47", features = ["derive"] }
-tokio = { version = "1.47.1", features = ["rt", "rt-multi-thread", "macros", "fs", "io-util"] }
+tokio = { version = "1.47.1", features = ["rt", "rt-multi-thread", "macros", "fs", "io-util", "sync"] }
+async-trait = "0.1.89"
+log = "0.4.28"

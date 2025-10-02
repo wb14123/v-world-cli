@@ -5,6 +5,8 @@ use crate::model::profile::Profile;
 
 mod model;
 mod dao;
+mod chat;
+mod llm;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
