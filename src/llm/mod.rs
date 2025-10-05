@@ -2,6 +2,8 @@ use std::error::Error;
 use std::sync::Arc;
 use async_trait::async_trait;
 
+pub mod openai;
+
 pub const ROLE_USER: &str = "user";
 pub const ROLE_SYSTEM: &str = "system";
 pub const ROLE_ASSISTANT: &str = "assistant";
