@@ -1,3 +1,3 @@
-mod plan_agent;
-mod room;
-mod message;
+pub mod plan_agent;
+pub mod room;
+pub mod message;

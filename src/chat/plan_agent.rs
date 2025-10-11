@@ -108,14 +108,12 @@ impl PlanAgent {
 
     async fn complete_chat(&self, profile: &Profile) -> Result<(), Box<dyn Error>> {
         // TODO: include profile conversation examples
-        let system_prompt = format!("You are simulation a profile in a group chat. \
+        let system_prompt = format!("You are simulating a profile in a group chat. \
             Here is the background of the profile: \n\
             id: {}\n\
             name: {}\n\
             background:\n\
-            {}\n\
-            Each message in the conversation is
-            ", profile.id, profile.name, profile.background);
+            {}", profile.id, profile.name, profile.background);
         let recent_chats = self.recent_chats.read().await;
         let conversation = recent_chats.iter()
             .map(|m| LLMConversation{role: m.role.clone(), content: m.content.clone()})

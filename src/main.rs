@@ -1,7 +1,12 @@
-
+use std::sync::Arc;
 use clap::{Parser, Subcommand};
 use crate::dao::profile_dao::ProfileDao;
 use crate::model::profile::Profile;
+use tokio_stream::{self as stream, StreamExt};
+use crate::chat::plan_agent::PlanAgent;
+use crate::chat::room::Room;
+use crate::llm::LLM;
+use crate::llm::openai::OpenAI;
 
 mod model;
 mod dao;
@@ -22,6 +27,12 @@ enum Commands {
     CreateProfile {
         #[arg(short, long)]
         id: String,
+    },
+    NewChat {
+        #[arg(short, long)]
+        profile_ids: Vec<String>,
+        #[arg(short, long)]
+        llm_config: String,
     }
 }
 
@@ -39,6 +50,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 println!("Profile template file already exists");
             }
+        }
+        Commands::NewChat {profile_ids, llm_config} => {
+            let llm = OpenAI::load_from_yaml(llm_config).await?;
+            let profiles: Vec<Arc<Profile>> = stream::iter(profile_ids)
+                .then(|id| {
+                    let dao = profile_dao.clone();
+                    async move { dao.get(&id).await }
+                })
+                .filter_map(|result| {
+                    match result {
+                        Ok(Some(p)) => Some(Arc::new(p)),
+                        Ok(None) => None,
+                        Err(e) => {
+                            eprintln!("Error when get profile: {}", e);
+                            None
+                        }
+                    }
+                })
+                .collect()
+                .await;
+            let room = Room::new(100, profiles);
+            let plan_agent = Arc::new(PlanAgent::new(Arc::new(llm), Arc::new(room)));
+            plan_agent.start().await;
         }
     }
     Ok(())

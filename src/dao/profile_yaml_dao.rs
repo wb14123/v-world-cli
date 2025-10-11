@@ -5,6 +5,7 @@ use std::path::Path;
 use tokio::fs::{create_dir, try_exists, File};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+#[derive(Clone)]
 pub struct ProfileYamlDao {
     db_path: String,
 }
@@ -30,7 +31,7 @@ impl ProfileDao for ProfileYamlDao {
         Ok(true)
     }
 
-    async fn get(&self, id: &str) -> Result<Option<Profile>, Box<dyn Error>> {
+    async fn get(&self, id: &String) -> Result<Option<Profile>, Box<dyn Error>> {
         let yaml_file = Path::new(&self.db_path).join(&id).with_extension("yaml");
         if !try_exists(&yaml_file).await? {
             return Ok(None)
