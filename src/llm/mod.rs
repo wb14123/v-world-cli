@@ -21,6 +21,6 @@ pub trait LLM: Send + Sync {
 
     async fn single_chat(&self, prompt: Arc<String>) -> Result<String, Box<dyn Error>> {
         self.complete(&"".to_string(),
-                      &vec!(LLMConversation{role: "User".to_string(), content: prompt})).await
+                      &vec!(LLMConversation{role: ROLE_USER.to_string(), content: prompt})).await
     }
 }

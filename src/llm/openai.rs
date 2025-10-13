@@ -1,5 +1,6 @@
 use super::{LLMConversation, LLM, ROLE_SYSTEM};
 use async_trait::async_trait;
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
@@ -9,22 +10,10 @@ pub struct OpenAIConfig {
     pub model: String,
     #[serde(default = "default_base_url")]
     pub base_url: String,
-    #[serde(default = "default_temperature")]
-    pub temperature: f32,
-    #[serde(default = "default_max_tokens")]
-    pub max_tokens: u32,
 }
 
 fn default_base_url() -> String {
     "https://api.openai.com/v1".to_string()
-}
-
-fn default_temperature() -> f32 {
-    0.7
-}
-
-fn default_max_tokens() -> u32 {
-    2048
 }
 
 pub struct OpenAI {
@@ -42,8 +31,6 @@ struct ChatMessage {
 struct ChatCompletionRequest {
     model: String,
     messages: Vec<ChatMessage>,
-    temperature: f32,
-    max_tokens: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -94,9 +81,11 @@ impl LLM for OpenAI {
         let request = ChatCompletionRequest {
             model: self.config.model.clone(),
             messages,
-            temperature: self.config.temperature,
-            max_tokens: self.config.max_tokens,
         };
+
+        // Log the request
+        info!("OpenAI API Request to model: {}", self.config.model);
+        debug!("Request payload: {:?}", request);
 
         let url = format!("{}/chat/completions", self.config.base_url);
 
@@ -109,15 +98,26 @@ impl LLM for OpenAI {
             .await?;
 
         if !response.status().is_success() {
+            let status = response.status();
             let error_text = response.text().await?;
+            info!("OpenAI API Error: status={}, error={}", status, error_text);
             return Err(format!("OpenAI API error: {}", error_text).into());
         }
 
         let completion: ChatCompletionResponse = response.json().await?;
 
-        completion.choices
+        // Log the response
+        debug!("OpenAI API Response: {:?}", completion);
+
+        let result = completion.choices
             .first()
             .map(|choice| choice.message.content.clone())
-            .ok_or_else(|| "No response from OpenAI".into())
+            .ok_or_else(|| "No response from OpenAI".into());
+
+        if let Ok(content) = &result {
+            info!("OpenAI API Success: received {} characters", content.len());
+        }
+
+        result
     }
 }

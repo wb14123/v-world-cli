@@ -8,6 +8,12 @@ pub struct ChatMessage {
 }
 
 #[derive(Clone, Debug)]
+pub struct ErrorMessage {
+    pub msg: String,
+}
+
+#[derive(Clone, Debug)]
 pub enum Message {
     Chat(Arc<ChatMessage>),
+    Error(Arc<ErrorMessage>),
 }

@@ -7,11 +7,13 @@ use crate::chat::plan_agent::PlanAgent;
 use crate::chat::room::Room;
 use crate::llm::LLM;
 use crate::llm::openai::OpenAI;
+use crate::ui::cli_ui::CliUI;
 
 mod model;
 mod dao;
 mod chat;
 mod llm;
+mod ui;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -38,6 +40,9 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize logging
+    log4rs::init_file("log4rs.yaml", Default::default())?;
+
     let cli = Cli::parse();
     let profile_dao = dao::profile_yaml_dao::new(cli.profile_path).await?;
     match cli.command {
@@ -70,9 +75,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 })
                 .collect()
                 .await;
-            let room = Room::new(100, profiles);
-            let plan_agent = Arc::new(PlanAgent::new(Arc::new(llm), Arc::new(room)));
+            let room = Arc::new(Room::new(100, profiles));
+            let plan_agent = Arc::new(PlanAgent::new(Arc::new(llm), room.clone()));
             plan_agent.start().await;
+            let ui = CliUI::new(room.clone(), Arc::new("tuser".into()), Arc::new("Test User".into()));
+            ui.start()?
         }
     }
     Ok(())

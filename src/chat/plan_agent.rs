@@ -4,7 +4,7 @@ use tokio::sync::broadcast::Receiver;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use log::{error, info};
-use crate::chat::message::{ChatMessage, Message};
+use crate::chat::message::{ChatMessage, ErrorMessage, Message};
 use crate::chat::room::Room;
 use crate::llm::{LLMConversation, LLM, ROLE_ASSISTANT};
 use crate::model::profile::Profile;
@@ -41,7 +41,11 @@ impl PlanAgent {
                 let result = self_clone.loop_worker().await;
                 match result {
                     Ok(..) => info!("Handled message in plan agent."),
-                    Err(err) => error!("Failed to handle message: {}", err),
+                    Err(err) => {
+                        self_clone.room
+                            .send_error(Arc::new(ErrorMessage { msg: format!("Failed to handle message: {}", err) }))
+                            .expect("cannot send error msg");
+                    }
                 }
             }
         }));
@@ -53,6 +57,7 @@ impl PlanAgent {
             Message::Chat(chat) => {
                 Ok(self.on_chat(chat).await?)
             }
+            _ => Ok(())
         }
     }
 
