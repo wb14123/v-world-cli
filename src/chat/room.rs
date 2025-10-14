@@ -12,7 +12,7 @@ pub struct Room {
 
 impl Room {
     pub fn new(channel_size: usize, profiles: Vec<Arc<Profile>>) -> Self {
-        let (tx, rx) = broadcast::channel(channel_size);
+        let (tx, _) = broadcast::channel(channel_size);
         Room { sender: tx , profiles }
     }
 

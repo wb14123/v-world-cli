@@ -3,6 +3,7 @@ use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct ChatMessage {
     pub from_user_id: String,
+    pub from_username: String,
     pub role: String,
     pub content: Arc<String>,
 }

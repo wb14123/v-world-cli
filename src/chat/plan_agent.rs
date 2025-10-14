@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use log::{error, info};
+use log::info;
 use crate::chat::message::{ChatMessage, ErrorMessage, Message};
 use crate::chat::room::Room;
 use crate::llm::{LLMConversation, LLM, ROLE_ASSISTANT};
@@ -62,12 +62,9 @@ impl PlanAgent {
     }
 
     fn summarize_profile(profiles: &Vec<Arc<Profile>>) -> String {
-        format!(
-            "Summarize the LLM agent profiles. Make sure to retain user ID for every user: \n{}",
-            profiles.iter()
-                .map(|p| format!("ID: {}\nBackground: {}", p.id, p.background))
-                .collect::<Vec<String>>().join("\n--------------")
-        )
+        profiles.iter()
+            .map(|p| format!("ID: {}\nName: {}\nBackground: {}", p.id, p.name, p.background))
+            .collect::<Vec<String>>().join("\n--------------")
     }
 
     fn get_prompt(profile_summary: &String, recent_messages: &Vec<Arc<ChatMessage>>) -> String {
@@ -113,21 +110,26 @@ impl PlanAgent {
 
     async fn complete_chat(&self, profile: &Profile) -> Result<(), Box<dyn Error>> {
         // TODO: include profile conversation examples
-        let system_prompt = format!("You are simulating a profile in a group chat. \
+        let system_prompt = format!("You are simulating a profile in a group chat to reply a new message. \
             Here is the background of the profile: \n\
             id: {}\n\
             name: {}\n\
-            background:\n\
-            {}", profile.id, profile.name, profile.background);
+            background:\n{}\
+            ", profile.id, profile.name, profile.background);
         let recent_chats = self.recent_chats.read().await;
         let conversation = recent_chats.iter()
-            .map(|m| LLMConversation{role: m.role.clone(), content: m.content.clone()})
+            .map(|m| LLMConversation{
+                role: m.role.clone(),
+                content: Arc::new(format!("{}(@{}): {}", m.from_username, m.from_user_id, m.content)),
+            })
             .collect::<Vec<LLMConversation>>();
         let response = self.llm.complete(&system_prompt, &conversation).await?;
+        let parsed_res = response.replace(&format!("{}(@{}): ", profile.name, profile.id), "");
         self.room.send_chat(Arc::new(ChatMessage{
                 from_user_id: profile.id.clone(),
+                from_username: profile.name.clone(),
                 role: ROLE_ASSISTANT.to_string(),
-                content: Arc::new(response),
+                content: Arc::new(parsed_res),
             }))?;
         Ok(())
     }

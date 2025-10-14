@@ -1,18 +1,18 @@
-use std::error::Error;
-use std::sync::Arc;
+use crate::chat::message::{ChatMessage, ErrorMessage, Message};
+use crate::chat::room::Room;
+use crate::llm::ROLE_USER;
+use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use tui_textarea::TextArea;
+use std::error::Error;
+use std::sync::Arc;
 use tokio::sync::broadcast::error::TryRecvError;
-use crate::chat::message::{ChatMessage, ErrorMessage, Message};
-use crate::chat::room::Room;
-use crate::llm::ROLE_USER;
+use tui_textarea::TextArea;
 
 pub struct CliUI {
     room: Arc<Room>,
@@ -85,6 +85,7 @@ impl CliUI {
                                 if !input.trim().is_empty() {
                                     let msg = Arc::new(ChatMessage {
                                         from_user_id: (*self.user_id).clone(),
+                                        from_username: (*self.username).clone(),
                                         role: ROLE_USER.into(),
                                         content: Arc::new(input),
                                     });
@@ -121,7 +122,8 @@ impl CliUI {
         let mut message_text = Text::default();
         for msg in messages {
             let role_line = Line::from(vec![
-                Span::styled(&msg.role, Style::default().fg(Color::Cyan)),
+                Span::styled(format!("{}(@{})", &msg.from_username, &msg.from_user_id),
+                             Style::default().fg(Color::Cyan)),
                 Span::raw(": "),
             ]);
             message_text.lines.push(role_line);
