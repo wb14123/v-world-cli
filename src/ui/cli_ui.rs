@@ -3,10 +3,10 @@ use crate::chat::room::Room;
 use crate::llm::ROLE_USER;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
     Frame,
 };
 use std::error::Error;
@@ -18,6 +18,11 @@ pub struct CliUI {
     room: Arc<Room>,
     user_id: Arc<String>,
     username: Arc<String>,
+}
+
+struct ScrollState {
+    vertical_scroll: usize,
+    vertical_scroll_state: ScrollbarState,
 }
 
 impl CliUI {
@@ -43,13 +48,19 @@ impl CliUI {
         let mut messages: Vec<Arc<ChatMessage>> = Vec::new();
         let mut errors: Vec<Arc<ErrorMessage>> = Vec::new();
         let mut receiver = self.room.subscribe();
+        let mut scroll_state = ScrollState {
+            vertical_scroll: 0,
+            vertical_scroll_state: ScrollbarState::default(),
+        };
 
         loop {
             // Try to receive new messages (non-blocking)
+            let mut new_messages = false;
             loop {
                 match receiver.try_recv() {
                     Ok(Message::Chat(chat_msg)) => {
                         messages.push(chat_msg);
+                        new_messages = true;
                     }
                     Ok(Message::Error(err_msg)) => {
                         errors.push(err_msg);
@@ -66,9 +77,14 @@ impl CliUI {
                 }
             }
 
+            // Auto-scroll to bottom when new messages arrive
+            if new_messages {
+                scroll_state.vertical_scroll = usize::MAX; // Will be clamped in draw()
+            }
+
             // Draw the UI
             terminal.draw(|frame| {
-                self.draw(frame, &messages, &errors, &textarea);
+                self.draw(frame, &messages, &errors, &textarea, &mut scroll_state);
             })?;
 
             // Handle input events
@@ -98,6 +114,22 @@ impl CliUI {
                                     );
                                 }
                             }
+                            KeyCode::Up => {
+                                scroll_state.vertical_scroll = scroll_state.vertical_scroll.saturating_sub(1);
+                                scroll_state.vertical_scroll_state = scroll_state.vertical_scroll_state.position(scroll_state.vertical_scroll);
+                            }
+                            KeyCode::Down => {
+                                scroll_state.vertical_scroll = scroll_state.vertical_scroll.saturating_add(1);
+                                scroll_state.vertical_scroll_state = scroll_state.vertical_scroll_state.position(scroll_state.vertical_scroll);
+                            }
+                            KeyCode::PageUp => {
+                                scroll_state.vertical_scroll = scroll_state.vertical_scroll.saturating_sub(10);
+                                scroll_state.vertical_scroll_state = scroll_state.vertical_scroll_state.position(scroll_state.vertical_scroll);
+                            }
+                            KeyCode::PageDown => {
+                                scroll_state.vertical_scroll = scroll_state.vertical_scroll.saturating_add(10);
+                                scroll_state.vertical_scroll_state = scroll_state.vertical_scroll_state.position(scroll_state.vertical_scroll);
+                            }
                             _ => {
                                 textarea.input(key);
                             }
@@ -108,7 +140,7 @@ impl CliUI {
         }
     }
 
-    fn draw(&self, frame: &mut Frame, messages: &[Arc<ChatMessage>], errors: &[Arc<ErrorMessage>], textarea: &TextArea) {
+    fn draw(&self, frame: &mut Frame, messages: &[Arc<ChatMessage>], errors: &[Arc<ErrorMessage>], textarea: &TextArea, scroll_state: &mut ScrollState) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
@@ -137,15 +169,44 @@ impl CliUI {
             message_text.lines.push(Line::from(""));
         }
 
+        let total_lines = message_text.lines.len();
+        let visible_height = chunks[0].height.saturating_sub(2) as usize; // Subtract borders
+
+        // Auto-scroll to bottom: set scroll to show the last page
+        let max_scroll = total_lines.saturating_sub(visible_height);
+        if scroll_state.vertical_scroll > max_scroll {
+            scroll_state.vertical_scroll = max_scroll;
+        }
+
+        // Update scrollbar state
+        scroll_state.vertical_scroll_state = scroll_state.vertical_scroll_state
+            .content_length(total_lines)
+            .position(scroll_state.vertical_scroll);
+
         let messages_paragraph = Paragraph::new(message_text)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title("Messages")
+                    .title("Messages (Use Up/Down/PgUp/PgDown to scroll)")
             )
-            .wrap(Wrap { trim: false });
+            .wrap(Wrap { trim: false })
+            .scroll((scroll_state.vertical_scroll as u16, 0));
 
         frame.render_widget(messages_paragraph, chunks[0]);
+
+        // Render scrollbar
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"));
+
+        let scrollbar_area = Rect {
+            x: chunks[0].x + chunks[0].width.saturating_sub(1),
+            y: chunks[0].y + 1,
+            width: 1,
+            height: chunks[0].height.saturating_sub(2),
+        };
+
+        frame.render_stateful_widget(scrollbar, scrollbar_area, &mut scroll_state.vertical_scroll_state);
 
         // Error area (middle 10%)
         let mut error_text = Text::default();
