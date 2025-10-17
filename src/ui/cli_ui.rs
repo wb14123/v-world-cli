@@ -12,6 +12,7 @@ use ratatui::{
 use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::broadcast::error::TryRecvError;
+use tokio::sync::watch;
 use tui_textarea::TextArea;
 
 pub struct CliUI {
@@ -46,6 +47,7 @@ impl CliUI {
         );
 
         let mut messages: Vec<Arc<ChatMessage>> = Vec::new();
+        let mut message_receivers: Vec<watch::Receiver<(Arc<Vec<String>>, bool)>> = Vec::new();
         let mut errors: Vec<Arc<ErrorMessage>> = Vec::new();
         let mut receiver = self.room.subscribe();
         let mut scroll_state = ScrollState {
@@ -59,7 +61,8 @@ impl CliUI {
             loop {
                 match receiver.try_recv() {
                     Ok(Message::Chat(chat_msg)) => {
-                        messages.push(chat_msg);
+                        messages.push(chat_msg.clone());
+                        message_receivers.push(chat_msg.content_stream.subscribe());
                         new_messages = true;
                     }
                     Ok(Message::Error(err_msg)) => {
@@ -77,14 +80,23 @@ impl CliUI {
                 }
             }
 
-            // Auto-scroll to bottom when new messages arrive
-            if new_messages {
+            // Check for updates in all message receivers
+            let mut content_updated = false;
+            for receiver in &mut message_receivers {
+                if receiver.has_changed().unwrap_or(false) {
+                    receiver.mark_unchanged();
+                    content_updated = true;
+                }
+            }
+
+            // Auto-scroll to bottom when new messages arrive or content updates
+            if new_messages || content_updated {
                 scroll_state.vertical_scroll = usize::MAX; // Will be clamped in draw()
             }
 
             // Draw the UI
             terminal.draw(|frame| {
-                self.draw(frame, &messages, &errors, &textarea, &mut scroll_state);
+                self.draw(frame, &messages, &errors, &textarea, &mut scroll_state, &mut message_receivers);
             })?;
 
             // Handle input events
@@ -99,11 +111,12 @@ impl CliUI {
                             KeyCode::Enter => {
                                 let input = textarea.lines().join("\n");
                                 if !input.trim().is_empty() {
+                                    let (sender, _rx) = watch::channel((Arc::new(vec![input.clone()]), true));
                                     let msg = Arc::new(ChatMessage {
                                         from_user_id: (*self.user_id).clone(),
                                         from_username: (*self.username).clone(),
                                         role: ROLE_USER.into(),
-                                        content: Arc::new(input),
+                                        content_stream: Arc::new(sender),
                                     });
                                     self.room.send_chat(msg)?;
                                     textarea = TextArea::default();
@@ -140,7 +153,7 @@ impl CliUI {
         }
     }
 
-    fn draw(&self, frame: &mut Frame, messages: &[Arc<ChatMessage>], errors: &[Arc<ErrorMessage>], textarea: &TextArea, scroll_state: &mut ScrollState) {
+    fn draw(&self, frame: &mut Frame, messages: &[Arc<ChatMessage>], errors: &[Arc<ErrorMessage>], textarea: &TextArea, scroll_state: &mut ScrollState, message_receivers: &mut [watch::Receiver<(Arc<Vec<String>>, bool)>]) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
@@ -152,7 +165,7 @@ impl CliUI {
 
         // Messages area (top 60%)
         let mut message_text = Text::default();
-        for msg in messages {
+        for (msg_index, msg) in messages.iter().enumerate() {
             let role_line = Line::from(vec![
                 Span::styled(format!("{}(@{})", &msg.from_username, &msg.from_user_id),
                              Style::default().fg(Color::Cyan)),
@@ -160,9 +173,14 @@ impl CliUI {
             ]);
             message_text.lines.push(role_line);
 
-            // Split content into lines and add each as a separate line
-            for content_line in msg.content.lines() {
-                message_text.lines.push(Line::from(content_line.to_string()));
+            // Get the accumulated content for this message from the watch receiver
+            if let Some(receiver) = message_receivers.get(msg_index) {
+                let (content_chunks, _is_complete) = &*receiver.borrow();
+                let content = content_chunks.join("");
+                // Split content into lines and add each as a separate line
+                for content_line in content.lines() {
+                    message_text.lines.push(Line::from(content_line.to_string()));
+                }
             }
 
             // Add blank line between messages
