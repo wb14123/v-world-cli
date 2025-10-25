@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log4rs::init_file("log4rs.yaml", Default::default())?;
 
     let cli = Cli::parse();
-    let profile_dao = dao::profile_yaml_dao::new(cli.profile_path).await?;
+    let profile_dao = Arc::new(dao::profile_yaml_dao::new(cli.profile_path).await?);
     match cli.command {
         Commands::CreateProfile { id} => {
             let mut p = Profile::default();

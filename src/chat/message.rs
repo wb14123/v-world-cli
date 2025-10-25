@@ -2,7 +2,7 @@ use std::sync::Arc;
 use log::info;
 use tokio::sync::watch::Sender;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ChatMessage {
     pub from_user_id: String,
     pub from_username: String,
@@ -32,7 +32,7 @@ impl ChatMessage {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ErrorMessage {
     pub msg: String,
 }

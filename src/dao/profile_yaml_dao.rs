@@ -5,7 +5,6 @@ use std::path::Path;
 use tokio::fs::{create_dir, try_exists, File};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-#[derive(Clone)]
 pub struct ProfileYamlDao {
     db_path: String,
 }
