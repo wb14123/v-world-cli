@@ -13,9 +13,8 @@ use crate::model::profile::Profile;
 pub struct PlanAgent {
     llm: Arc<dyn LLM>,
     room: Arc<Room>,
-    msg_receiver: RwLock<Receiver<Message>>,
-    process: RwLock<Option<JoinHandle<()>>>,
-    recent_chats: RwLock<Vec<Arc<ChatMessage>>>,
+    msg_receiver: Receiver<Message>,
+    recent_chats: Vec<Arc<ChatMessage>>,
     profiles_summarize: String,
 }
 
@@ -24,36 +23,30 @@ impl PlanAgent {
         PlanAgent{
             llm,
             room: room.clone(),
-            msg_receiver: RwLock::new(room.subscribe()),
-            process: RwLock::new(None),
-            recent_chats: RwLock::new(Vec::new()),
+            msg_receiver: room.subscribe(),
+            recent_chats: Vec::new(),
             profiles_summarize: Self::summarize_profile(&room.profiles)
         }
     }
 
-    pub async fn start(self: Arc<Self>) {
-        if self.process.read().await.is_some() {
-            return
-        }
-        let mut p = self.process.write().await;
-        let self_clone = self.clone();
-        *p = Some(tokio::spawn(async move {
+    pub async fn start(mut self) -> JoinHandle<()> {
+        tokio::spawn(async move {
             loop {
-                let result = self_clone.loop_worker().await;
+                let result = self.loop_worker().await;
                 match result {
                     Ok(..) => info!("Handled message in plan agent."),
                     Err(err) => {
-                        self_clone.room
+                        self.room
                             .send_error(Arc::new(ErrorMessage { msg: format!("Failed to handle message: {}", err) }))
                             .expect("cannot send error msg");
                     }
                 }
             }
-        }));
+        })
     }
 
-    async fn loop_worker(&self) -> Result<(), Box<dyn Error>> {
-        let msg = self.msg_receiver.write().await.recv().await?;
+    async fn loop_worker(&mut self) -> Result<(), Box<dyn Error>> {
+        let msg = self.msg_receiver.recv().await?;
         match msg {
             Message::Chat(chat) => {
                 info!("received chat: {:?}", chat);
@@ -93,10 +86,9 @@ impl PlanAgent {
         ")
     }
 
-    async fn on_chat(&self, msg: Arc<ChatMessage>) -> Result<(), Box<dyn Error>> {
-        self.recent_chats.write().await.push(msg);
-        let recent_chats = self.recent_chats.read().await;
-        let prompt = Self::get_prompt(&self.profiles_summarize, &recent_chats).await;
+    async fn on_chat(&mut self, msg: Arc<ChatMessage>) -> Result<(), Box<dyn Error>> {
+        self.recent_chats.push(msg);
+        let prompt = Self::get_prompt(&self.profiles_summarize, &self.recent_chats).await;
         let next_user = self.llm.single_chat(Arc::new(prompt)).await?;
         if next_user.starts_with("@") {
             let next_id = next_user.trim_start_matches("@").to_string();
@@ -121,9 +113,8 @@ impl PlanAgent {
             name: {}\n\
             background:\n{}\
             ", profile.id, profile.name, profile.background);
-        let recent_chats = self.recent_chats.read().await;
         let mut conversation = Vec::new();
-        for m in recent_chats.iter() {
+        for m in self.recent_chats.iter() {
             conversation.push(LLMConversation{
                 role: m.role.clone(),
                 content: Arc::new(format!("{}(@{}): {}", m.from_username, m.from_user_id, m.read_content().await)),

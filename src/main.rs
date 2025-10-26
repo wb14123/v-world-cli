@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .collect()
                 .await;
             let room = Arc::new(Room::new(100, profiles));
-            let plan_agent = Arc::new(PlanAgent::new(Arc::new(llm), room.clone()));
+            let plan_agent = PlanAgent::new(Arc::new(llm), room.clone());
             plan_agent.start().await;
             let ui = CliUI::new(room.clone(), Arc::new("tuser".into()), Arc::new("Test User".into()));
             ui.start()?
