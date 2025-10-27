@@ -136,7 +136,7 @@ impl PlanAgent {
             content_vec.write().await.push(parsed_res);
             sender_ref.send((content_vec.clone(), false))?;
         };
-        sender_ref.send((content_vec.clone(), true))?;
+        sender_ref.send((content_vec, true))?;
         Ok(())
     }
 }
