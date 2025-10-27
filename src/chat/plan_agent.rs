@@ -120,8 +120,8 @@ impl PlanAgent {
                 content: Arc::new(format!("{}(@{}): {}", m.from_username, m.from_user_id, m.read_content().await)),
             });
         }
-        let content_vec = RwLock::new(vec![]);
-        let (sender, _rx) = watch::channel((Arc::new(content_vec.read().await.clone()), false));
+        let content_vec = Arc::new(RwLock::new(vec![]));
+        let (sender, _rx) = watch::channel((content_vec.clone(), false));
         let sender_ref = Arc::new(sender);
         let msg = ChatMessage{
             from_user_id: profile.id.clone(),
@@ -134,9 +134,9 @@ impl PlanAgent {
         while let Some(response) = stream.next().await {
             let parsed_res = response.map_err(|e| e as Box<dyn Error>)?.replace(&format!("{}(@{}): ", profile.name, profile.id), "");
             content_vec.write().await.push(parsed_res);
-            sender_ref.send((Arc::new(content_vec.read().await.clone()), false))?;
+            sender_ref.send((content_vec.clone(), false))?;
         };
-        sender_ref.send((Arc::new(content_vec.read().await.clone()), true))?;
+        sender_ref.send((content_vec.clone(), true))?;
         Ok(())
     }
 }

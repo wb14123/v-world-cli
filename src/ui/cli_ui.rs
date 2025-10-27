@@ -12,7 +12,7 @@ use ratatui::{
 use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::broadcast::error::TryRecvError;
-use tokio::sync::watch;
+use tokio::sync::{watch, RwLock};
 use tui_textarea::TextArea;
 
 pub struct CliUI {
@@ -47,7 +47,7 @@ impl CliUI {
         );
 
         let mut messages: Vec<Arc<ChatMessage>> = Vec::new();
-        let mut message_receivers: Vec<watch::Receiver<(Arc<Vec<String>>, bool)>> = Vec::new();
+        let mut message_receivers: Vec<watch::Receiver<(Arc<RwLock<Vec<String>>>, bool)>> = Vec::new();
         let mut errors: Vec<Arc<ErrorMessage>> = Vec::new();
         let mut receiver = self.room.subscribe();
         let mut scroll_state = ScrollState {
@@ -111,7 +111,7 @@ impl CliUI {
                             KeyCode::Enter => {
                                 let input = textarea.lines().join("\n");
                                 if !input.trim().is_empty() {
-                                    let (sender, _rx) = watch::channel((Arc::new(vec![input.clone()]), true));
+                                    let (sender, _rx) = watch::channel((Arc::new(RwLock::new(vec![input.clone()])), true));
                                     let msg = Arc::new(ChatMessage {
                                         from_user_id: (*self.user_id).clone(),
                                         from_username: (*self.username).clone(),
@@ -153,7 +153,7 @@ impl CliUI {
         }
     }
 
-    fn draw(&self, frame: &mut Frame, messages: &[Arc<ChatMessage>], errors: &[Arc<ErrorMessage>], textarea: &TextArea, scroll_state: &mut ScrollState, message_receivers: &mut [watch::Receiver<(Arc<Vec<String>>, bool)>]) {
+    fn draw(&self, frame: &mut Frame, messages: &[Arc<ChatMessage>], errors: &[Arc<ErrorMessage>], textarea: &TextArea, scroll_state: &mut ScrollState, message_receivers: &mut [watch::Receiver<(Arc<RwLock<Vec<String>>>, bool)>]) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
@@ -176,10 +176,14 @@ impl CliUI {
             // Get the accumulated content for this message from the watch receiver
             if let Some(receiver) = message_receivers.get(msg_index) {
                 let (content_chunks, _is_complete) = &*receiver.borrow();
-                let content = content_chunks.join("");
-                // Split content into lines and add each as a separate line
-                for content_line in content.lines() {
-                    message_text.lines.push(Line::from(content_line.to_string()));
+                // Since we're in a synchronous drawing context, we can't await the lock
+                // Use try_read to avoid blocking
+                if let Ok(chunks) = content_chunks.try_read() {
+                    let content = chunks.join("");
+                    // Split content into lines and add each as a separate line
+                    for content_line in content.lines() {
+                        message_text.lines.push(Line::from(content_line.to_string()));
+                    }
                 }
             }
 
